@@ -6,7 +6,8 @@ import (
 )
 
 func main() {
-	app := lightning.DefaultApp()
+	app := lightning.NewApp()
+
 	app.Use(compress.Default())
 
 	app.Get("/ping", func(ctx *lightning.Context) {

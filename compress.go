@@ -11,8 +11,84 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+type Compressor interface {
+	Compress([]byte) ([]byte, error)
+}
+
+type BrotliCompression struct{}
+
+func (c *BrotliCompression) Compress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := brotli.NewWriter(&buf)
+	_, err := writer.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	err = writer.Flush()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+type DeflateCompression struct{}
+
+func (c *DeflateCompression) Compress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer, err := flate.NewWriter(&buf, 5)
+	if err != nil {
+		return nil, err
+	}
+	_, err = writer.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	err = writer.Flush()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+type GzipCompression struct{}
+
+func (c *GzipCompression) Compress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	_, err := writer.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	err = writer.Flush()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+type ZstdCompression struct{}
+
+func (c *ZstdCompression) Compress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer, err := zstd.NewWriter(&buf)
+	if err != nil {
+		return nil, err
+	}
+	_, err = writer.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	err = writer.Flush()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// br [0,11]
+// deflate / gzip [-2,9]
+// zstd [0,5]
 type config struct {
-	writer *bytes.Buffer
 }
 
 type Options func(*config)
@@ -28,78 +104,35 @@ func New(options ...Options) lightning.Middleware {
 		option(cfg)
 	}
 
-	buf := &bytes.Buffer{}
-	brWriter := brotli.NewWriter(cfg.writer)
-	deflateWriter, _ := flate.NewWriter(cfg.writer, 5)
-	gzipWriter := gzip.NewWriter(cfg.writer)
-	zstdWriter, _ := zstd.NewWriter(cfg.writer)
-
 	return func(ctx *lightning.Context) {
 		ctx.Next()
 
 		acceptEncoding := ctx.Header("Accept-Encoding")
 		body := ctx.Body()
 
+		var encoding string
+		var compressor Compressor
+
 		switch {
 		case strings.Contains(acceptEncoding, "br"):
-			brWriter.Reset(buf)
-			buf.Reset()
-			_, err := brWriter.Write(body)
-			if err != nil {
-				return
-			}
-			err = brWriter.Flush()
-			if err != nil {
-				return
-			}
-
-			ctx.SetHeader("Content-Encoding", "br")
-			ctx.SetBody(buf.Bytes())
+			compressor = &BrotliCompression{}
+			encoding = "br"
 		case strings.Contains(acceptEncoding, "deflate"):
-			deflateWriter.Reset(buf)
-			buf.Reset()
-
-			_, err := deflateWriter.Write(body)
-			if err != nil {
-				return
-			}
-			err = deflateWriter.Flush()
-			if err != nil {
-				return
-			}
-
-			ctx.SetHeader("Content-Encoding", "deflate")
-			ctx.SetBody(buf.Bytes())
+			compressor = &DeflateCompression{}
+			encoding = "deflate"
 		case strings.Contains(acceptEncoding, "gzip"):
-			gzipWriter.Reset(buf)
-			buf.Reset()
-
-			_, err := gzipWriter.Write(body)
-			if err != nil {
-				return
-			}
-			err = gzipWriter.Flush()
-			if err != nil {
-				return
-			}
-
-			ctx.SetHeader("Content-Encoding", "gzip")
-			ctx.SetBody(buf.Bytes())
+			compressor = &GzipCompression{}
+			encoding = "gzip"
 		case strings.Contains(acceptEncoding, "zstd"):
-			zstdWriter.Reset(buf)
-			buf.Reset()
-
-			_, err := zstdWriter.Write(body)
-			if err != nil {
-				return
-			}
-			err = zstdWriter.Flush()
-			if err != nil {
-				return
-			}
-
-			ctx.SetHeader("Content-Encoding", "zstd")
-			ctx.SetBody(buf.Bytes())
+			compressor = &ZstdCompression{}
+			encoding = "zstd"
 		}
+
+		compressed, err := compressor.Compress(body)
+		if err != nil {
+			return
+		}
+		ctx.SetHeader("Content-Encoding", encoding)
+		ctx.SetBody(compressed)
 	}
 }
