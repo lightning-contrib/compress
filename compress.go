@@ -26,7 +26,7 @@ type BrotliCompression struct{}
 
 func (c *BrotliCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
-	writer := brotli.NewWriter(&buf)
+	writer := brotli.NewWriterLevel(&buf, brotli.DefaultCompression)
 	_, err := writer.Write(data)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ type DeflateCompression struct{}
 
 func (c *DeflateCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
-	writer, err := flate.NewWriter(&buf, 5)
+	writer, err := flate.NewWriter(&buf, flate.DefaultCompression)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +61,12 @@ type GzipCompression struct{}
 
 func (c *GzipCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
-	writer := gzip.NewWriter(&buf)
-	_, err := writer.Write(data)
+	writer, err := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = writer.Write(data)
 	if err != nil {
 		return nil, err
 	}
