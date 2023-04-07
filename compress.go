@@ -18,12 +18,14 @@ const (
 	EncodingZstd    = "zstd"
 )
 
+// Compressor is an interface that defines the Compress method
 type Compressor interface {
 	Compress([]byte) ([]byte, error)
 }
 
 type BrotliCompression struct{}
 
+// Compress compresses the given data using Brotli compression algorithm
 func (c *BrotliCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := brotli.NewWriterLevel(&buf, brotli.DefaultCompression)
@@ -40,6 +42,7 @@ func (c *BrotliCompression) Compress(data []byte) ([]byte, error) {
 
 type DeflateCompression struct{}
 
+// Compress compresses the given data using Deflate compression algorithm
 func (c *DeflateCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer, err := flate.NewWriter(&buf, flate.DefaultCompression)
@@ -59,6 +62,7 @@ func (c *DeflateCompression) Compress(data []byte) ([]byte, error) {
 
 type GzipCompression struct{}
 
+// Compress compresses the given data using Gzip compression algorithm
 func (c *GzipCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer, err := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
@@ -79,6 +83,7 @@ func (c *GzipCompression) Compress(data []byte) ([]byte, error) {
 
 type ZstdCompression struct{}
 
+// Compress compresses the given data using Zstd compression algorithm
 func (c *ZstdCompression) Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer, err := zstd.NewWriter(&buf)
@@ -102,12 +107,15 @@ func (c *ZstdCompression) Compress(data []byte) ([]byte, error) {
 type config struct {
 }
 
+// Options is a function that takes a pointer to a config struct
 type Options func(*config)
 
+// Default returns a lightning middleware with default options
 func Default() lightning.Middleware {
 	return New()
 }
 
+// New returns a lightning middleware with the given options
 func New(options ...Options) lightning.Middleware {
 	cfg := &config{}
 
