@@ -11,6 +11,13 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+const (
+	EncodingBrotli  = "br"
+	EncodingDeflate = "deflate"
+	EncodingGzip    = "gzip"
+	EncodingZstd    = "zstd"
+)
+
 type Compressor interface {
 	Compress([]byte) ([]byte, error)
 }
@@ -114,18 +121,18 @@ func New(options ...Options) lightning.Middleware {
 		var compressor Compressor
 
 		switch {
-		case strings.Contains(acceptEncoding, "br"):
+		case strings.Contains(acceptEncoding, EncodingBrotli):
 			compressor = &BrotliCompression{}
-			encoding = "br"
-		case strings.Contains(acceptEncoding, "deflate"):
+			encoding = EncodingBrotli
+		case strings.Contains(acceptEncoding, EncodingDeflate):
 			compressor = &DeflateCompression{}
-			encoding = "deflate"
-		case strings.Contains(acceptEncoding, "gzip"):
+			encoding = EncodingDeflate
+		case strings.Contains(acceptEncoding, EncodingGzip):
 			compressor = &GzipCompression{}
-			encoding = "gzip"
-		case strings.Contains(acceptEncoding, "zstd"):
+			encoding = EncodingGzip
+		case strings.Contains(acceptEncoding, EncodingZstd):
 			compressor = &ZstdCompression{}
-			encoding = "zstd"
+			encoding = EncodingZstd
 		}
 
 		compressed, err := compressor.Compress(body)
