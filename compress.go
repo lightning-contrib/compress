@@ -20,15 +20,15 @@ const (
 
 // Compressor is an interface that defines the Compress method
 type Compressor interface {
-	Compress([]byte) ([]byte, error)
+	Compress(data []byte, level int) ([]byte, error)
 }
 
 type BrotliCompression struct{}
 
 // Compress compresses the given data using Brotli compression algorithm
-func (c *BrotliCompression) Compress(data []byte) ([]byte, error) {
+func (c *BrotliCompression) Compress(data []byte, level int) ([]byte, error) {
 	var buf bytes.Buffer
-	writer := brotli.NewWriterLevel(&buf, brotli.DefaultCompression)
+	writer := brotli.NewWriterLevel(&buf, level)
 	_, err := writer.Write(data)
 	if err != nil {
 		return nil, err
@@ -43,9 +43,9 @@ func (c *BrotliCompression) Compress(data []byte) ([]byte, error) {
 type DeflateCompression struct{}
 
 // Compress compresses the given data using Deflate compression algorithm
-func (c *DeflateCompression) Compress(data []byte) ([]byte, error) {
+func (c *DeflateCompression) Compress(data []byte, level int) ([]byte, error) {
 	var buf bytes.Buffer
-	writer, err := flate.NewWriter(&buf, flate.DefaultCompression)
+	writer, err := flate.NewWriter(&buf, level)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +63,9 @@ func (c *DeflateCompression) Compress(data []byte) ([]byte, error) {
 type GzipCompression struct{}
 
 // Compress compresses the given data using Gzip compression algorithm
-func (c *GzipCompression) Compress(data []byte) ([]byte, error) {
+func (c *GzipCompression) Compress(data []byte, level int) ([]byte, error) {
 	var buf bytes.Buffer
-	writer, err := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
+	writer, err := gzip.NewWriterLevel(&buf, level)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (c *GzipCompression) Compress(data []byte) ([]byte, error) {
 type ZstdCompression struct{}
 
 // Compress compresses the given data using Zstd compression algorithm
-func (c *ZstdCompression) Compress(data []byte) ([]byte, error) {
+func (c *ZstdCompression) Compress(data []byte, _ int) ([]byte, error) {
 	var buf bytes.Buffer
 	writer, err := zstd.NewWriter(&buf)
 	if err != nil {
@@ -101,14 +101,38 @@ func (c *ZstdCompression) Compress(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// br [0,11]
-// deflate / gzip [-2,9]
-// zstd [0,5]
 type config struct {
+	// BrotliCompressionLevel is the compression level for Brotli compression algorithm
+	BrotliCompressionLevel int
+	// DeflateCompressionLevel is the compression level for Deflate compression algorithm
+	DeflateCompressionLevel int
+	// GzipCompressionLevel is the compression level for Gzip compression algorithm
+	GzipCompressionLevel int
 }
 
 // Options is a function that takes a pointer to a config struct
 type Options func(*config)
+
+// WithBrotliCompressionLevel sets the compression level for Brotli compression algorithm
+func WithBrotliCompressionLevel(level int) Options {
+	return func(c *config) {
+		c.BrotliCompressionLevel = level
+	}
+}
+
+// WithDeflateCompressionLevel sets the compression level for Deflate compression algorithm
+func WithDeflateCompressionLevel(level int) Options {
+	return func(c *config) {
+		c.DeflateCompressionLevel = level
+	}
+}
+
+// WithGzipCompressionLevel sets the compression level for Gzip compression algorithm
+func WithGzipCompressionLevel(level int) Options {
+	return func(c *config) {
+		c.GzipCompressionLevel = level
+	}
+}
 
 // Default returns a lightning middleware with default options
 func Default() lightning.Middleware {
@@ -117,7 +141,11 @@ func Default() lightning.Middleware {
 
 // New returns a lightning middleware with the given options
 func New(options ...Options) lightning.Middleware {
-	cfg := &config{}
+	cfg := &config{
+		BrotliCompressionLevel:  brotli.DefaultCompression,
+		DeflateCompressionLevel: flate.DefaultCompression,
+		GzipCompressionLevel:    gzip.DefaultCompression,
+	}
 
 	for _, option := range options {
 		option(cfg)
@@ -127,27 +155,32 @@ func New(options ...Options) lightning.Middleware {
 		ctx.Next()
 
 		acceptEncoding := ctx.Header("Accept-Encoding")
-		body := ctx.Body()
-
 		var encoding string
 		var compressor Compressor
+		var level int
 
 		switch {
 		case strings.Contains(acceptEncoding, EncodingBrotli):
 			compressor = &BrotliCompression{}
 			encoding = EncodingBrotli
+			level = cfg.BrotliCompressionLevel
 		case strings.Contains(acceptEncoding, EncodingDeflate):
 			compressor = &DeflateCompression{}
 			encoding = EncodingDeflate
+			level = cfg.DeflateCompressionLevel
 		case strings.Contains(acceptEncoding, EncodingGzip):
 			compressor = &GzipCompression{}
 			encoding = EncodingGzip
+			level = cfg.GzipCompressionLevel
 		case strings.Contains(acceptEncoding, EncodingZstd):
 			compressor = &ZstdCompression{}
 			encoding = EncodingZstd
 		}
 
-		compressed, err := compressor.Compress(body)
+		if compressor == nil {
+			return
+		}
+		compressed, err := compressor.Compress(ctx.Body(), level)
 		if err != nil {
 			return
 		}
