@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/go-labx/lightning"
 	"github.com/lightning-contrib/compress"
 )
@@ -17,7 +15,7 @@ func main() {
 	))
 
 	app.Get("/ping", func(ctx *lightning.Context) {
-		ctx.Text(200, strings.Repeat("hello world", 100))
+		ctx.Text(200, "hello world")
 	})
 
 	app.Run(":6789")
